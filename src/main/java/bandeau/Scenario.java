@@ -1,5 +1,7 @@
 package bandeau;
 import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.LinkedList;
 
 /**
@@ -23,6 +25,10 @@ public class Scenario {
 
     private final List<ScenarioElement> myElements = new LinkedList<>();
 
+    private final ReentrantReadWriteLock rrwl = new ReentrantReadWriteLock();
+    private final Lock verrouJouer = rrwl.readLock();
+    private final Lock verrouAjout = rrwl.writeLock();
+
     /**
      * Ajouter un effect au scenario.
      *
@@ -30,7 +36,10 @@ public class Scenario {
      * @param repeats le nombre de répétitions pour cet effet
      */
     public void addEffect(Effect e, int repeats) {
-        myElements.add(new ScenarioElement(e, repeats));
+        verrouAjout.lock(); try {
+            myElements.add(new ScenarioElement(e, repeats));
+        } finally {verrouAjout.unlock();}
+        
     }
 
     /**
@@ -38,11 +47,20 @@ public class Scenario {
      *
      * @param b le bandeau ou s'afficher.
      */
-    public void playOn(Bandeau b) {
-        for (ScenarioElement element : myElements) {
-            for (int repeats = 0; repeats < element.repeats; repeats++) {
-                element.effect.playOn(b);
-            }
-        }
+    public void playOn(BandeauThread b) {
+        verrouJouer.lock(); try {
+            Thread thread = new Thread(
+                () -> {
+                    b.verrouiller();
+                    for (ScenarioElement element : myElements) {
+                        for (int repeats = 0; repeats < element.repeats; repeats++) {
+                            element.effect.playOn(b);
+                        }
+                    }
+                    b.deverrouiller();
+                }
+            );
+            thread.start();
+        } finally{verrouJouer.unlock();}   
     }
 }
